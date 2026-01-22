@@ -1,0 +1,848 @@
+--- java/mm/health_data_tracker/exception/GlobalExceptionHandler.java ---
+package mm.health_data_tracker.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, String>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+
+        ex.getBindingResult().getFieldErrors().forEach(error ->
+                errors.put(error.getField(), error.getDefaultMessage())
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleCustomErrors(IllegalArgumentException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+}
+--- java/mm/health_data_tracker/controller/TestResultController.java ---
+package mm.health_data_tracker.controller;
+
+
+import lombok.RequiredArgsConstructor;
+import mm.health_data_tracker.dto.TestResultDto;
+import mm.health_data_tracker.service.TestResultService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.security.Principal;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/results")
+@CrossOrigin
+@RequiredArgsConstructor
+public class TestResultController {
+
+    private final TestResultService resultService;
+
+    @GetMapping
+    public List<TestResultDto> getMyResults(Principal principal) {
+        return resultService.getResultsForUser(principal.getName());
+    }
+
+    @PostMapping
+    public ResponseEntity<TestResultDto> addResult(@RequestBody TestResultDto dto, Principal principal) {
+        return ResponseEntity.ok(resultService.addResult(dto, principal.getName()));
+    }
+}
+--- java/mm/health_data_tracker/controller/TestParameterController.java ---
+package mm.health_data_tracker.controller;
+
+import lombok.RequiredArgsConstructor;
+import mm.health_data_tracker.dto.TestParameterDto;
+import mm.health_data_tracker.service.TestParameterService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.security.Principal;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/parameters")
+@CrossOrigin
+@RequiredArgsConstructor
+public class TestParameterController {
+
+    private final TestParameterService parameterService;
+
+    @GetMapping
+    public List<TestParameterDto> getParameters(Principal principal) {
+        return parameterService.getAllParametersForUser(principal.getName());
+    }
+
+    @PostMapping
+    public ResponseEntity<TestParameterDto> addParameter(@RequestBody TestParameterDto dto, Principal principal) {
+        return ResponseEntity.ok(parameterService.createPrivateParameter(dto, principal.getName()));
+    }
+}
+--- java/mm/health_data_tracker/controller/JwtAuthenticationController.java ---
+package mm.health_data_tracker.controller;
+
+import jakarta.validation.Valid;
+import mm.health_data_tracker.dto.JwtRequest;
+import mm.health_data_tracker.dto.JwtResponse;
+import mm.health_data_tracker.dto.UserDto;
+import mm.health_data_tracker.security.CustomUserDetailsService;
+import mm.health_data_tracker.security.JwtTokenUtil;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@CrossOrigin
+@RequestMapping("/auth")
+public class JwtAuthenticationController {
+
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenUtil jwtTokenUtil;
+    private final CustomUserDetailsService userDetailsService;
+
+    public JwtAuthenticationController(AuthenticationManager authenticationManager,
+                                       JwtTokenUtil jwtTokenUtil,
+                                       CustomUserDetailsService userDetailsService) {
+        this.authenticationManager = authenticationManager;
+        this.jwtTokenUtil = jwtTokenUtil;
+        this.userDetailsService = userDetailsService;
+    }
+
+    @PostMapping("/authenticate")
+    public ResponseEntity<?> createAuthenticationToken(@RequestBody JwtRequest authenticationRequest)
+            throws Exception {
+        authenticate(authenticationRequest.getUsername(), authenticationRequest.getPassword());
+
+        final UserDetails userDetails = userDetailsService
+                .loadUserByUsername(authenticationRequest.getUsername());
+
+        final String token = jwtTokenUtil.generateToken(userDetails);
+
+        return ResponseEntity.ok(new JwtResponse(token));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<?> saveUser(@Valid @RequestBody UserDto user) throws Exception {
+        return ResponseEntity.ok(userDetailsService.save(user));
+    }
+
+    private void authenticate(String username, String password) throws Exception {
+        try {
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+        } catch (DisabledException e) {
+            throw new Exception("USER_DISABLED", e);
+        } catch (BadCredentialsException e) {
+            throw new Exception("INVALID_CREDENTIALS", e);
+        }
+    }
+}
+--- java/mm/health_data_tracker/model/AppUser.java ---
+package mm.health_data_tracker.model;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.util.List;
+
+@Entity
+@Table(name = "app_users")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class AppUser {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(unique = true, nullable = false)
+    private String username;
+
+    @Column(nullable = false)
+    @JsonIgnore
+    private String password;
+
+    private String email;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TestResult> testResults;
+}
+--- java/mm/health_data_tracker/model/TestParameter.java ---
+package mm.health_data_tracker.model;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+@Entity
+@Table(name = "test_parameters")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class TestParameter {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    private String unit;
+
+    private Double minNorm;
+    private Double maxNorm;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "creator_id")
+    @JsonIgnore
+    private AppUser creator;
+}
+--- java/mm/health_data_tracker/model/TestResult.java ---
+package mm.health_data_tracker.model;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import java.time.LocalDate;
+
+@Entity
+@Table(name = "test_results")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class TestResult {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private Double value;
+
+    @Column(nullable = false)
+    private LocalDate testDate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
+    private AppUser user;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "parameter_id", nullable = false)
+    private TestParameter parameter;
+}
+--- java/mm/health_data_tracker/repository/AppUserRepository.java ---
+package mm.health_data_tracker.repository;
+
+import mm.health_data_tracker.model.AppUser;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+@Repository
+public interface AppUserRepository extends JpaRepository<AppUser, Long> {
+    Optional<AppUser> findByUsername(String username);
+
+    boolean existsByUsername(String username);
+    boolean existsByEmail(String email);
+}
+--- java/mm/health_data_tracker/repository/TestResultRepository.java ---
+package mm.health_data_tracker.repository;
+
+import mm.health_data_tracker.model.TestResult;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface TestResultRepository extends JpaRepository<TestResult, Long> {
+    List<TestResult> findByUser_UsernameOrderByTestDateDesc(String username);
+}
+--- java/mm/health_data_tracker/repository/TestParameterRepository.java ---
+package mm.health_data_tracker.repository;
+
+import mm.health_data_tracker.model.TestParameter;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface TestParameterRepository extends JpaRepository<TestParameter, Long> {
+    @Query("SELECT p FROM TestParameter p WHERE p.creator IS NULL OR p.creator.username = :username")
+    List<TestParameter> findSystemAndUserParameters(@Param("username") String username);
+}
+--- java/mm/health_data_tracker/security/JwtRequestFilter.java ---
+package mm.health_data_tracker.security;
+
+import io.jsonwebtoken.ExpiredJwtException;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+import java.io.IOException;
+
+@Component
+public class JwtRequestFilter extends OncePerRequestFilter {
+
+    private final CustomUserDetailsService userDetailsService;
+    private final JwtTokenUtil jwtTokenUtil;
+
+    public JwtRequestFilter(CustomUserDetailsService userDetailsService, JwtTokenUtil jwtTokenUtil) {
+        this.userDetailsService = userDetailsService;
+        this.jwtTokenUtil = jwtTokenUtil;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+
+        final String requestTokenHeader = request.getHeader("Authorization");
+
+        String username = null;
+        String jwtToken = null;
+
+        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
+            jwtToken = requestTokenHeader.substring(7);
+            try {
+                username = jwtTokenUtil.getUsernameFromToken(jwtToken);
+            } catch (IllegalArgumentException e) {
+                System.out.println("Unable to get JWT Token");
+            } catch (ExpiredJwtException e) {
+                System.out.println("JWT Token has expired");
+            }
+        }
+
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+
+            if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
+                UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken =
+                        new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities()
+                        );
+                usernamePasswordAuthenticationToken
+                        .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+            }
+        }
+        chain.doFilter(request, response);
+    }
+}
+--- java/mm/health_data_tracker/security/PasswordConfig.java ---
+package mm.health_data_tracker.security;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+public class PasswordConfig {
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
+--- java/mm/health_data_tracker/security/JwtTokenUtil.java ---
+package mm.health_data_tracker.security;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Component;
+import java.security.Key;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+@Component
+public class JwtTokenUtil {
+
+    public static final long JWT_TOKEN_VALIDITY = 5 * 60 * 60;
+
+    @Value("${jwt.secret:ToJestBardzoDlugieTajneHasloKtoreMusiMiecPrzynajmniej32ZnakiZebyDzialaloPoprawnie123}")
+    private String secret;
+
+    public String getUsernameFromToken(String token) {
+        return getClaimFromToken(token, Claims::getSubject);
+    }
+
+    public Date getExpirationDateFromToken(String token) {
+        return getClaimFromToken(token, Claims::getExpiration);
+    }
+
+    public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = getAllClaimsFromToken(token);
+        return claimsResolver.apply(claims);
+    }
+
+    private Claims getAllClaimsFromToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    private Boolean isTokenExpired(String token) {
+        final Date expiration = getExpirationDateFromToken(token);
+        return expiration.before(new Date());
+    }
+
+    public String generateToken(UserDetails userDetails) {
+        Map<String, Object> claims = new HashMap<>();
+        return doGenerateToken(claims, userDetails.getUsername());
+    }
+
+    private String doGenerateToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(subject)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + JWT_TOKEN_VALIDITY * 1000))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = getUsernameFromToken(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+
+    private Key getSigningKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(java.util.Base64.getEncoder().encodeToString(secret.getBytes()));
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+}
+
+--- java/mm/health_data_tracker/security/CustomUserDetailsService.java ---
+package mm.health_data_tracker.security;
+
+
+
+import mm.health_data_tracker.dto.UserDto;
+import mm.health_data_tracker.model.AppUser;
+import mm.health_data_tracker.repository.AppUserRepository;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import java.util.Collections;
+
+@Service
+public class CustomUserDetailsService implements UserDetailsService {
+
+    private final AppUserRepository appUserRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public CustomUserDetailsService(AppUserRepository appUserRepository, PasswordEncoder passwordEncoder) {
+        this.appUserRepository = appUserRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        AppUser appUser = appUserRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+
+        return new User(
+                appUser.getUsername(),
+                appUser.getPassword(),
+                Collections.emptyList()
+        );
+    }
+
+    public AppUser save(UserDto userDto) {
+        if (appUserRepository.existsByUsername(userDto.getUsername())) {
+            throw new IllegalArgumentException("Użytkownik o takim loginie już istnieje");
+        }
+        if (appUserRepository.existsByEmail(userDto.getEmail())) {
+            throw new IllegalArgumentException("Ten email jest już zajęty");
+        }
+
+        AppUser newUser = new AppUser();
+        newUser.setUsername(userDto.getUsername());
+        newUser.setEmail(userDto.getEmail());
+        newUser.setPassword(passwordEncoder.encode(userDto.getPassword()));
+
+        return appUserRepository.save(newUser);
+    }
+}
+--- java/mm/health_data_tracker/security/WebSecurityConfig.java ---
+package mm.health_data_tracker.security;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+@Configuration
+@EnableWebSecurity
+public class WebSecurityConfig {
+
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final CustomUserDetailsService userDetailsService;
+    private final JwtRequestFilter jwtRequestFilter;
+
+    public WebSecurityConfig(JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
+                             CustomUserDetailsService userDetailsService,
+                             JwtRequestFilter jwtRequestFilter) {
+        this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
+        this.userDetailsService = userDetailsService;
+        this.jwtRequestFilter = jwtRequestFilter;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
+        return authConfig.getAuthenticationManager();
+    }
+
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider(
+            PasswordEncoder passwordEncoder ) {
+        DaoAuthenticationProvider provider
+                = new DaoAuthenticationProvider(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder);
+        return provider;
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                   DaoAuthenticationProvider authenticationProvider) throws Exception {
+        http
+                // Wyłączamy CSRF (niepotrzebne przy REST API i JWT)
+                .csrf(AbstractHttpConfigurer::disable)
+                // Włączamy CORS (żeby Angular mógł gadać z Backendem)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // Ustawiamy ścieżki publiczne i prywatne
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/auth/**", "/error").permitAll()
+                        .anyRequest().authenticated() // Reszta wymaga logowania
+                )
+                // Sesja bezstanowa (Stateless) - bo mamy JWT
+                .sessionManagement(sess ->
+                        sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Obsługa błędów (401)
+                .exceptionHandling(ex ->
+                        ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                // Dodajemy naszego dostawcę autentykacji
+                .authenticationProvider(authenticationProvider)
+                // Dodajemy filtr JWT przed standardowym filtrem hasła
+                .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    // Konfiguracja CORS (pozwala na zapytania z localhost:4200 - Angular)
+    @Bean
+    public UrlBasedCorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowCredentials(true);
+        configuration.addAllowedOrigin("http://localhost:4200"); // Adres Angulara
+        configuration.addAllowedHeader("*");
+        configuration.addAllowedMethod("*");
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+}
+--- java/mm/health_data_tracker/security/JwtAuthenticationEntryPoint.java ---
+package mm.health_data_tracker.security;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.stereotype.Component;
+import java.io.IOException;
+
+@Component
+public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response,
+                         AuthenticationException authException) throws IOException {
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+    }
+}
+--- java/mm/health_data_tracker/HealthDataTrackerApplication.java ---
+package mm.health_data_tracker;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class HealthDataTrackerApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(HealthDataTrackerApplication.class, args);
+	}
+
+}
+
+--- java/mm/health_data_tracker/service/TestParameterService.java ---
+package mm.health_data_tracker.service;
+
+import lombok.RequiredArgsConstructor;
+import mm.health_data_tracker.dto.TestParameterDto;
+import mm.health_data_tracker.model.AppUser;
+import mm.health_data_tracker.model.TestParameter;
+import mm.health_data_tracker.repository.AppUserRepository;
+import mm.health_data_tracker.repository.TestParameterRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class TestParameterService {
+
+    private final TestParameterRepository parameterRepository;
+    private final AppUserRepository userRepository;
+
+    public List<TestParameterDto> getAllParametersForUser(String username) {
+        return parameterRepository.findSystemAndUserParameters(username).stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+    }
+
+    public TestParameterDto createPrivateParameter(TestParameterDto dto, String username) {
+        AppUser creator = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        TestParameter param = new TestParameter();
+        param.setName(dto.getName());
+        param.setUnit(dto.getUnit());
+        param.setMinNorm(dto.getMinNorm());
+        param.setMaxNorm(dto.getMaxNorm());
+        param.setCreator(creator);
+
+        TestParameter saved = parameterRepository.save(param);
+        return mapToDto(saved);
+    }
+
+    private TestParameterDto mapToDto(TestParameter param) {
+        TestParameterDto dto = new TestParameterDto();
+        dto.setId(param.getId());
+        dto.setName(param.getName());
+        dto.setUnit(param.getUnit());
+        dto.setMinNorm(param.getMinNorm());
+        dto.setMaxNorm(param.getMaxNorm());
+        return dto;
+    }
+}
+--- java/mm/health_data_tracker/service/TestResultService.java ---
+package mm.health_data_tracker.service;
+
+import lombok.RequiredArgsConstructor;
+import mm.health_data_tracker.dto.TestResultDto;
+import mm.health_data_tracker.model.AppUser;
+import mm.health_data_tracker.model.TestParameter;
+import mm.health_data_tracker.model.TestResult;
+import mm.health_data_tracker.repository.AppUserRepository;
+import mm.health_data_tracker.repository.TestParameterRepository;
+import mm.health_data_tracker.repository.TestResultRepository;
+import org.springframework.stereotype.Service;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class TestResultService {
+
+    private final TestResultRepository resultRepository;
+    private final TestParameterRepository parameterRepository;
+    private final AppUserRepository userRepository;
+
+    public List<TestResultDto> getResultsForUser(String username) {
+        return resultRepository.findByUser_UsernameOrderByTestDateDesc(username).stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+    }
+
+    public TestResultDto addResult(TestResultDto dto, String username) {
+        AppUser user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        TestParameter param = parameterRepository.findById(dto.getParameterId())
+                .orElseThrow(() -> new RuntimeException("Parameter not found"));
+
+        TestResult result = new TestResult();
+        result.setValue(dto.getValue());
+        result.setTestDate(dto.getDate());
+        result.setUser(user);
+        result.setParameter(param);
+
+        TestResult saved = resultRepository.save(result);
+        return mapToDto(saved);
+    }
+
+    private TestResultDto mapToDto(TestResult result) {
+        TestResultDto dto = new TestResultDto();
+        dto.setId(result.getId());
+        dto.setValue(result.getValue());
+        dto.setDate(result.getTestDate());
+        dto.setParameterId(result.getParameter().getId());
+        dto.setParameterName(result.getParameter().getName());
+        dto.setParameterUnit(result.getParameter().getUnit());
+        return dto;
+    }
+}
+--- java/mm/health_data_tracker/dto/UserDto.java ---
+package mm.health_data_tracker.dto;
+
+import lombok.Data;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+@Data
+public class UserDto {
+
+    @NotBlank(message = "Login jest wymagany")
+    @Size(min = 3, message = "Login musi mieć min. 3 znaki")
+    private String username;
+
+    @NotBlank(message = "Hasło jest wymagane")
+    @Size(min = 8, message = "Hasło musi mieć min. 8 znaków")
+
+    @Pattern(regexp = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z]).{8,}$",
+            message = "Hasło musi zawierać małą literę, dużą literę i cyfrę")
+    private String password;
+
+    @NotBlank(message = "Email jest wymagany")
+    @Email(message = "Niepoprawny format email")
+    private String email;
+}
+--- java/mm/health_data_tracker/dto/JwtRequest.java ---
+package mm.health_data_tracker.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class JwtRequest {
+    private String username;
+    private String password;
+}
+--- java/mm/health_data_tracker/dto/TestParameterDto.java ---
+package mm.health_data_tracker.dto;
+
+import lombok.Data;
+
+@Data
+public class TestParameterDto {
+    private Long id;
+    private String name;
+    private String unit;
+    private Double minNorm;
+    private Double maxNorm;
+}
+--- java/mm/health_data_tracker/dto/JwtResponse.java ---
+package mm.health_data_tracker.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class JwtResponse {
+    private final String token;
+}
+--- java/mm/health_data_tracker/dto/TestResultDto.java ---
+package mm.health_data_tracker.dto;
+
+import lombok.Data;
+import java.time.LocalDate;
+
+@Data
+public class TestResultDto {
+    private Long id;
+    private Double value;
+    private LocalDate date;
+    private Long parameterId;
+    private String parameterName;
+    private String parameterUnit;
+}
+--- resources/application.properties ---
+spring.application.name=health-data-tracker
+server.port=8080
+
+# Konfiguracja Bazy Danych (PostgreSQL)
+spring.datasource.url=jdbc:postgresql://localhost:5433/medical_db
+spring.datasource.username=admin
+spring.datasource.password=adminpassword
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# JPA / Hibernate
+spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+
+# Rozwi?zanie problemu cyklicznych zale?no?ci (przydatne przy Security)
+spring.main.allow-circular-references=true
