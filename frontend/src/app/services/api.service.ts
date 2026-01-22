@@ -12,8 +12,6 @@ export class ApiService {
 
   constructor(private http: HttpClient) { }
 
-  // --- PARAMETRY ---
-
   getParameters(): Observable<TestParameter[]> {
     return this.http.get<TestParameter[]>(`${this.apiUrl}/parameters`);
   }
@@ -21,8 +19,6 @@ export class ApiService {
   addParameter(param: TestParameter): Observable<TestParameter> {
     return this.http.post<TestParameter>(`${this.apiUrl}/parameters`, param);
   }
-
-  // --- WYNIKI ---
 
   getResults(): Observable<TestResult[]> {
     return this.http.get<TestResult[]>(`${this.apiUrl}/results`);

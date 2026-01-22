@@ -139,8 +139,6 @@ export class DashboardComponent implements OnInit {
     this.averageValue = sum / this.filteredResults.length;
   }
 
-  // === MODALNE OKNA - WYNIKI ===
-
   openEditResultModal(result: TestResult) {
     this.editingResultId = result.id!;
     this.resultForm.patchValue({
@@ -178,16 +176,9 @@ export class DashboardComponent implements OnInit {
     
     this.apiService.deleteResult(this.deletingResultId).subscribe({
       next: () => {
-        // 1. Usuwamy z głównej listy i nadpisujemy referencję (ważne dla Angulara)
         this.results = this.results.filter(r => r.id !== this.deletingResultId);
-        
-        // 2. Aktualizujemy widok filtrowany i wykres
         this.filterResults();
-        
-        // 3. Zamykamy modal
         this.closeDeleteResultModal();
-        
-        // 4. Wymuszamy odświeżenie
         this.cdr.detectChanges();
       }
     });
@@ -214,8 +205,6 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  // === MODALNE OKNA - PARAMETRY ===
-
   openEditParamModal() {
     if (!this.selectedParamId) return;
     const param = this.parameters.find(p => p.id === this.selectedParamId);
@@ -229,7 +218,7 @@ export class DashboardComponent implements OnInit {
   closeEditParamModal() {
     this.showEditParamModal = false;
     this.editingParamId = null;
-    this.editParamError = ''; // Czyścimy błąd edycji
+    this.editParamError = '';
     this.paramForm.reset();
   }
 
@@ -247,23 +236,12 @@ export class DashboardComponent implements OnInit {
 
     this.apiService.deleteParameter(this.selectedParamId).subscribe({
       next: () => {
-        // 1. Usuwamy parametr z listy (nowa referencja)
         this.parameters = this.parameters.filter(p => p.id !== this.selectedParamId);
-        
-        // 2. Usuwamy powiązane wyniki z pamięci lokalnej
         this.results = this.results.filter(r => r.parameterId !== this.selectedParamId);
-        
-        // 3. Resetujemy wybór
         this.selectedParamId = null;
         this.selectedParamIsPrivate = false;
-        
-        // 4. Czyścimy tabelę i wykres
         this.filterResults();
-        
-        // 5. Zamykamy modal
         this.closeDeleteParamModal();
-        
-        // 6. Wymuszamy odświeżenie
         this.cdr.detectChanges();
       }
     });
@@ -302,8 +280,6 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  // === DODAWANIE NOWYCH (bez zmian) ===
-
   submitResult() {
     if (this.resultForm.invalid) return;
 
@@ -329,7 +305,7 @@ export class DashboardComponent implements OnInit {
 
   submitParam() {
     if (this.paramForm.invalid) return;
-    this.addParamError = ''; // Używamy addParamError
+    this.addParamError = '';
 
     this.apiService.addParameter(this.paramForm.value).subscribe({
       next: (res) => {
@@ -343,7 +319,6 @@ export class DashboardComponent implements OnInit {
       }
     });
   }
-  // === WYKRES I SORTOWANIE ===
 
   updateChart() {
     const chartData = [...this.filteredResults].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());

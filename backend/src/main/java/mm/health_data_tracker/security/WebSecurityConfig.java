@@ -50,35 +50,27 @@ public class WebSecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                    DaoAuthenticationProvider authenticationProvider) throws Exception {
         http
-                // Wyłączamy CSRF (niepotrzebne przy REST API i JWT)
                 .csrf(AbstractHttpConfigurer::disable)
-                // Włączamy CORS (żeby Angular mógł gadać z Backendem)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // Ustawiamy ścieżki publiczne i prywatne
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**", "/error").permitAll()
-                        .anyRequest().authenticated() // Reszta wymaga logowania
+                        .anyRequest().authenticated()
                 )
-                // Sesja bezstanowa (Stateless) - bo mamy JWT
                 .sessionManagement(sess ->
                         sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Obsługa błędów (401)
                 .exceptionHandling(ex ->
                         ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
-                // Dodajemy naszego dostawcę autentykacji
                 .authenticationProvider(authenticationProvider)
-                // Dodajemy filtr JWT przed standardowym filtrem hasła
                 .addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    // Konfiguracja CORS (pozwala na zapytania z localhost:4200 - Angular)
     @Bean
     public UrlBasedCorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowCredentials(true);
-        configuration.addAllowedOrigin("http://localhost:4200"); // Adres Angulara
+        configuration.addAllowedOrigin("http://localhost:4200");
         configuration.addAllowedHeader("*");
         configuration.addAllowedMethod("*");
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

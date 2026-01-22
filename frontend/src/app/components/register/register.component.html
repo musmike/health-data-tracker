@@ -41,18 +41,14 @@
               </div>
             </div>
 
-            <!-- HASŁO - TU BRAKOWAŁO KOMUNIKATU -->
+            <!-- HASŁO -->
             <div class="mb-3">
               <label class="form-label">Hasło</label>
               <input type="password" class="form-control" formControlName="password"
                 [class.is-invalid]="registerForm.get('password')?.invalid && registerForm.get('password')?.touched">
               <div class="invalid-feedback">
                 <span *ngIf="registerForm.get('password')?.hasError('required')">Hasło wymagane. </span>
-
-                <!-- TEGO BRAKOWAŁO: -->
                 <span *ngIf="registerForm.get('password')?.hasError('minlength')">Hasło musi mieć min. 8 znaków. </span>
-
-                <!-- Błąd z Backendu (np. brak dużej litery) -->
                 <span *ngIf="registerForm.get('password')?.hasError('backend')">
                   {{ registerForm.get('password')?.getError('backend') }}
                 </span>

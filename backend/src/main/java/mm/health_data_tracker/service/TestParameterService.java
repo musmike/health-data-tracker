@@ -7,7 +7,6 @@ import mm.health_data_tracker.model.TestParameter;
 import mm.health_data_tracker.repository.AppUserRepository;
 import mm.health_data_tracker.repository.TestParameterRepository;
 import org.springframework.stereotype.Service;
-
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -25,7 +24,6 @@ public class TestParameterService {
     }
 
     public TestParameterDto createPrivateParameter(TestParameterDto dto, String username) {
-        // 1. Walidacja norm
         validateNorms(dto.getMinNorm(), dto.getMaxNorm());
 
         AppUser creator = userRepository.findByUsername(username)
@@ -33,7 +31,7 @@ public class TestParameterService {
 
         TestParameter param = new TestParameter();
         param.setName(dto.getName());
-        param.setUnit(dto.getUnit()); // Może być null, to OK
+        param.setUnit(dto.getUnit());
         param.setMinNorm(dto.getMinNorm());
         param.setMaxNorm(dto.getMaxNorm());
         param.setCreator(creator);
@@ -53,7 +51,6 @@ public class TestParameterService {
     }
 
     public TestParameterDto updateParameter(Long id, TestParameterDto dto, String username) {
-        // 1. Walidacja norm
         validateNorms(dto.getMinNorm(), dto.getMaxNorm());
 
         TestParameter param = parameterRepository.findById(id)

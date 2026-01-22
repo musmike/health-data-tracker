@@ -13,7 +13,7 @@ import { CommonModule } from '@angular/common';
 })
 export class RegisterComponent {
   registerForm: FormGroup;
-  globalError: string = ''; // Na błędy ogólne (np. serwer padł)
+  globalError: string = '';
 
   constructor(
     private fb: FormBuilder,
@@ -35,18 +35,14 @@ export class RegisterComponent {
           this.router.navigate(['/login']);
         },
         error: (err) => {
-          // TUTAJ JEST LOGIKA OBSŁUGI BŁĘDÓW Z BACKENDU
           if (err.status === 400) {
-            const validationErrors = err.error; // To jest ta mapa {pole: "komunikat"}
-            
-            // Iterujemy po polach (username, password, email)
+            const validationErrors = err.error;
+
             Object.keys(validationErrors).forEach(key => {
               const control = this.registerForm.get(key);
               if (control) {
-                // Ustawiamy błąd w kontrolce Angulara
                 control.setErrors({ backend: validationErrors[key] });
               } else {
-                // Jeśli błąd dotyczy czegoś innego (np. "error" z wyjątku ogólnego)
                 this.globalError = validationErrors[key];
               }
             });
