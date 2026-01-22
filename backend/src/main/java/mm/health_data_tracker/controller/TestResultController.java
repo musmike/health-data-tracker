@@ -26,4 +26,16 @@ public class TestResultController {
     public ResponseEntity<TestResultDto> addResult(@RequestBody TestResultDto dto, Principal principal) {
         return ResponseEntity.ok(resultService.addResult(dto, principal.getName()));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteResult(@PathVariable Long id, Principal principal) {
+        resultService.deleteResult(id, principal.getName());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<TestResultDto> updateResult(@PathVariable Long id,
+                              @RequestBody TestResultDto dto, Principal principal) {
+        return ResponseEntity.ok(resultService.updateResult(id, dto, principal.getName()));
+    }
 }

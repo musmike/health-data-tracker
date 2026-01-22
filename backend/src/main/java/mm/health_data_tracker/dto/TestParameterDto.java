@@ -9,4 +9,5 @@ public class TestParameterDto {
     private String unit;
     private Double minNorm;
     private Double maxNorm;
+    private boolean privateParam;
 }

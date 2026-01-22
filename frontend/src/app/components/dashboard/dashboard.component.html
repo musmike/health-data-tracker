@@ -1,0 +1,364 @@
+<!-- Pasek nawigacyjny -->
+<nav class="navbar navbar-expand navbar-dark bg-primary py-2 mb-4 shadow-sm">
+  <div class="container">
+    <a class="navbar-brand fs-5" href="#">🏥 Badania medyczne</a>
+    <div class="d-flex align-items-center text-white small">
+      <span class="me-3 opacity-75">Użytkownik: <strong>{{ username }}</strong></span>
+      <button class="btn btn-sm btn-light text-primary fw-bold" (click)="logout()">Wyloguj</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="row">
+
+    <!-- KOLUMNA LEWA: Formularze -->
+    <div class="col-md-4 mb-4">
+
+      <!-- Karta 1: Formularz Wyników (tylko dodawanie) -->
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header py-2 bg-success text-white">
+          <i class="bi bi-plus-circle"></i> Dodaj wynik
+        </div>
+        <div class="card-body">
+          <form [formGroup]="resultForm" (ngSubmit)="submitResult()">
+            <div class="mb-2">
+              <label class="form-label small mb-1">Badanie</label>
+              <select class="form-select form-select-sm" formControlName="parameterId">
+                <option value="" disabled>Wybierz...</option>
+                <option *ngFor="let p of parameters" [value]="p.id">
+                  {{ p.name }}
+                  <span *ngIf="p.unit"> ({{ p.unit }})</span>
+                </option>
+              </select>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small mb-1">Wartość</label>
+              <input type="number" class="form-control form-control-sm" formControlName="value" placeholder="0.00">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small mb-1">Data</label>
+              <input type="date" class="form-control form-control-sm" formControlName="date">
+            </div>
+
+            <button type="submit" class="btn btn-sm btn-success w-100" [disabled]="resultForm.invalid">
+              Zapisz wynik
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Karta 2: Nowy Parametr (tylko dodawanie) -->
+      <div class="card shadow-sm border-0">
+        <div class="card-header py-2 small bg-secondary text-white">
+          Definicja nowego badania
+        </div>
+        <div class="card-body">
+
+          <div *ngIf="addParamError" class="alert alert-danger p-2 small mb-2">
+            {{ addParamError }}
+          </div>
+
+          <form [formGroup]="paramForm" (ngSubmit)="submitParam()">
+            <div class="mb-2">
+              <input type="text" class="form-control form-control-sm" formControlName="name"
+                placeholder="Nazwa (np. Żelazo)">
+            </div>
+            <div class="mb-2">
+              <input type="text" class="form-control form-control-sm" formControlName="unit"
+                placeholder="Jednostka (np. mg/dl)">
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <input type="number" class="form-control form-control-sm" formControlName="minNorm" placeholder="Min">
+              </div>
+              <div class="col-6">
+                <input type="number" class="form-control form-control-sm" formControlName="maxNorm" placeholder="Max">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-sm btn-outline-secondary w-100" [disabled]="paramForm.invalid">
+              Stwórz badanie
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- KOLUMNA PRAWA -->
+    <div class="col-md-8">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <h6 class="mb-0 text-primary">Historia wyników</h6>
+
+          <!-- PANEL FILTRACJI I EDYCJI BADANIA -->
+          <div class="d-flex align-items-center gap-2">
+            <select class="form-select form-select-sm" style="width: auto; min-width: 200px;"
+              [(ngModel)]="selectedParamId" (change)="onParamSelectChange()">
+
+              <option [ngValue]="null" disabled>-- Wybierz badanie --</option>
+
+              <option *ngFor="let p of parameters" [ngValue]="p.id">
+                {{ p.name }}
+              </option>
+            </select>
+
+            <!-- Przyciski edycji/usuwania PARAMETRU -->
+            <div *ngIf="selectedParamId && selectedParamIsPrivate" class="btn-group">
+              <button class="btn btn-sm btn-outline-warning" title="Edytuj badanie" (click)="openEditParamModal()">
+                ✎
+              </button>
+              <button class="btn btn-sm btn-outline-danger" title="Usuń badanie" (click)="openDeleteParamModal()">
+                🗑
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body p-0">
+
+          <!-- Loading -->
+          <div *ngIf="isLoading" class="p-5 text-center">
+            <div class="spinner-border text-primary" role="status"></div>
+          </div>
+
+          <!-- Empty State -->
+          <div *ngIf="!isLoading && !selectedParamId" class="p-5 text-center text-muted">
+            <p class="mb-1">👈 Wybierz badanie z listy powyżej,</p>
+            <small>aby zobaczyć historię i wykres zmian.</small>
+          </div>
+
+          <!-- WYKRES -->
+          <div *ngIf="!isLoading && selectedParamId && filteredResults.length > 0"
+            class="p-4 border-bottom bg-light bg-opacity-25 position-relative">
+            <div class="position-absolute top-0 end-0 m-2 badge bg-primary opacity-75">
+              Średnia: {{ averageValue | number:'1.2-2' }}
+            </div>
+
+            <div style="height: 250px;">
+              <canvas baseChart [data]="lineChartData" [options]="lineChartOptions" [type]="'line'"></canvas>
+            </div>
+          </div>
+
+          <!-- BRAK WYNIKÓW -->
+          <div *ngIf="!isLoading && selectedParamId && filteredResults.length === 0" 
+              class="p-5 text-center text-muted">
+            <i class="bi bi-clipboard-x" style="font-size: 3rem; opacity: 0.3;"></i>
+            <p class="mt-3 mb-1 fw-bold">Brak wyników dla tego badania</p>
+            <small>Dodaj pierwszy wynik, aby zobaczyć wykres i historię.</small>
+          </div>
+
+          <!-- TABELA -->
+          <table class="table table-hover mb-0 align-middle text-sm text-center"
+            style="table-layout: fixed; width: 100%;" *ngIf="!isLoading && filteredResults.length > 0">
+            <colgroup>
+              <col span="6" />
+            </colgroup>
+
+            <thead class="table-light text-secondary small text-uppercase cursor-pointer">
+              <tr>
+                <th (click)="toggleSort('date')">
+                  Data
+                  <span *ngIf="sortColumn === 'date'">
+                    {{ sortDirection === 'asc' ? '▲' : '▼' }}
+                  </span>
+                </th>
+
+                <th (click)="toggleSort('value')">
+                  Wynik
+                  <span *ngIf="sortColumn === 'value'">
+                    {{ sortDirection === 'asc' ? '▲' : '▼' }}
+                  </span>
+                </th>
+
+                <th>Jedn.</th>
+                <th>Min</th>
+                <th>Max</th>
+                <th>Akcje</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr *ngFor="let r of filteredResults">
+                <td class="text-muted small">
+                  {{ r.date | date:'dd.MM.yyyy' }}
+                </td>
+
+                <td class="fw-bold">
+                  <span *ngIf="r.maxNorm != null && r.value > r.maxNorm!" class="text-danger">
+                    {{ r.value }} ↑
+                  </span>
+                  <span *ngIf="r.minNorm != null && r.value < r.minNorm!" class="text-danger">
+                    {{ r.value }} ↓
+                  </span>
+                  <span *ngIf="(r.maxNorm == null || r.value <= r.maxNorm!) 
+              && (r.minNorm == null || r.value >= r.minNorm!)" class="text-success">
+                    {{ r.value }}
+                  </span>
+                </td>
+
+                <td class="text-muted small">
+                  {{ r.parameterUnit }}
+                </td>
+
+                <td class="text-secondary small">
+                  {{ r.minNorm ?? '-' }}
+                </td>
+
+                <td class="text-secondary small">
+                  {{ r.maxNorm ?? '-' }}
+                </td>
+
+                <td>
+                  <button class="btn btn-link btn-sm text-warning p-0 me-2" (click)="openEditResultModal(r)"
+                    title="Edytuj">
+                    ✎
+                  </button>
+
+                  <button class="btn btn-link btn-sm text-danger p-0" (click)="openDeleteResultModal(r.id!)"
+                    title="Usuń">
+                    🗑
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL: Edycja Wyniku -->
+<div class="modal" [class.show]="showEditResultModal" [style.display]="showEditResultModal ? 'block' : 'none'"
+  tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title">Edytuj Wynik</h5>
+        <button type="button" class="btn-close" (click)="closeEditResultModal()"></button>
+      </div>
+      <form [formGroup]="resultForm" (ngSubmit)="submitResultEdit()">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Badanie</label>
+            <select class="form-select" formControlName="parameterId">
+              <option *ngFor="let p of parameters" [value]="p.id">
+                {{ p.name }} <span *ngIf="p.unit">({{ p.unit }})</span>
+              </option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Wartość</label>
+            <input type="number" class="form-control" formControlName="value" step="0.01">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Data</label>
+            <input type="date" class="form-control" formControlName="date">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeEditResultModal()">Anuluj</button>
+          <button type="submit" class="btn btn-warning" [disabled]="resultForm.invalid">Zapisz zmiany</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" [class.show]="showEditResultModal" *ngIf="showEditResultModal"></div>
+
+<!-- MODAL: Usuwanie Wyniku -->
+<div class="modal" [class.show]="showDeleteResultModal" [style.display]="showDeleteResultModal ? 'block' : 'none'"
+  tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Potwierdzenie usunięcia</h5>
+        <button type="button" class="btn-close btn-close-white" (click)="closeDeleteResultModal()"></button>
+      </div>
+      <div class="modal-body text-center">
+        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
+        <p class="mt-3 mb-0">Czy na pewno chcesz usunąć ten wynik?</p>
+        <small class="text-muted">Ta operacja jest nieodwracalna.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeDeleteResultModal(); $event.stopPropagation()">Anuluj</button>
+        <button type="button" class="btn btn-danger" (click)="confirmDeleteResult(); $event.stopPropagation()">Usuń</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" [class.show]="showDeleteResultModal" *ngIf="showDeleteResultModal"></div>
+
+<!-- MODAL: Edycja Parametru -->
+<div class="modal" [class.show]="showEditParamModal" [style.display]="showEditParamModal ? 'block' : 'none'"
+  tabindex="-1" >
+  <div class="modal-dialog modal-dialog-centered" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header bg-info">
+        <h5 class="modal-title">Edytuj Badanie</h5>
+        <button type="button" class="btn-close" (click)="closeEditParamModal()"></button>
+      </div>
+      <form [formGroup]="paramForm" (ngSubmit)="submitParamEdit()">
+        <div class="modal-body">
+          <div *ngIf="editParamError" class="alert alert-danger">
+            {{ editParamError }}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Nazwa badania</label>
+            <input type="text" class="form-control" formControlName="name">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Jednostka</label>
+            <input type="text" class="form-control" formControlName="unit" placeholder="np. mg/dl">
+          </div>
+          <div class="row">
+            <div class="col-6 mb-3">
+              <label class="form-label">Norma Min</label>
+              <input type="number" class="form-control" formControlName="minNorm" step="0.01">
+            </div>
+            <div class="col-6 mb-3">
+              <label class="form-label">Norma Max</label>
+              <input type="number" class="form-control" formControlName="maxNorm" step="0.01">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" (click)="closeEditParamModal()">Anuluj</button>
+          <button type="submit" class="btn btn-info" [disabled]="paramForm.invalid">Zapisz zmiany</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" [class.show]="showEditParamModal" *ngIf="showEditParamModal"></div>
+
+<!-- MODAL: Usuwanie Parametru -->
+<div class="modal" [class.show]="showDeleteParamModal" [style.display]="showDeleteParamModal ? 'block' : 'none'"
+  tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" (click)="$event.stopPropagation()">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">⚠️ Potwierdzenie usunięcia badania</h5>
+        <button type="button" class="btn-close btn-close-white" (click)="closeDeleteParamModal()"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning">
+          <strong>Uwaga!</strong> Usunięcie badania spowoduje również usunięcie <strong>wszystkich</strong> powiązanych
+          z nim wyników.
+        </div>
+        <p class="mb-0">Czy na pewno chcesz kontynuować?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeDeleteParamModal(); $event.stopPropagation()">Anuluj</button>
+        <button type="button" class="btn btn-danger" (click)="confirmDeleteParam(); $event.stopPropagation()">
+          <i class="bi bi-trash"></i> Usuń badanie i wszystkie wyniki
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" [class.show]="showDeleteParamModal" *ngIf="showDeleteParamModal"></div>

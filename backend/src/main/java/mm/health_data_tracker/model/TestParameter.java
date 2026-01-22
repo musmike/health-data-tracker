@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import java.util.List;
+
 @Entity
 @Table(name = "test_parameters")
 @Getter
@@ -31,4 +33,8 @@ public class TestParameter {
     @JoinColumn(name = "creator_id")
     @JsonIgnore
     private AppUser creator;
+
+    @OneToMany(mappedBy = "parameter", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private List<TestResult> results;
 }

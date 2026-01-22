@@ -25,4 +25,16 @@ public class TestParameterController {
     public ResponseEntity<TestParameterDto> addParameter(@RequestBody TestParameterDto dto, Principal principal) {
         return ResponseEntity.ok(parameterService.createPrivateParameter(dto, principal.getName()));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteParameter(@PathVariable Long id, Principal principal) {
+        parameterService.deleteParameter(id, principal.getName());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<TestParameterDto> updateParameter(@PathVariable Long id,
+                                    @RequestBody TestParameterDto dto, Principal principal) {
+        return ResponseEntity.ok(parameterService.updateParameter(id, dto, principal.getName()));
+    }
 }

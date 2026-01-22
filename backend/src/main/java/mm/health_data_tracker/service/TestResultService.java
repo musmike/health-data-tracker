@@ -43,6 +43,30 @@ public class TestResultService {
         return mapToDto(saved);
     }
 
+    public void deleteResult(Long id, String username) {
+        TestResult result = resultRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Nie znaleziono wyniku"));
+
+        if (!result.getUser().getUsername().equals(username)) {
+            throw new RuntimeException("To nie Twój wynik");
+        }
+        resultRepository.delete(result);
+    }
+
+    public TestResultDto updateResult(Long id, TestResultDto dto, String username) {
+        TestResult result = resultRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Nie znaleziono wyniku"));
+
+        if (!result.getUser().getUsername().equals(username)) {
+            throw new RuntimeException("To nie Twój wynik");
+        }
+
+        result.setValue(dto.getValue());
+        result.setTestDate(dto.getDate());
+
+        return mapToDto(resultRepository.save(result));
+    }
+
     private TestResultDto mapToDto(TestResult result) {
         TestResultDto dto = new TestResultDto();
         dto.setId(result.getId());
@@ -51,6 +75,8 @@ public class TestResultService {
         dto.setParameterId(result.getParameter().getId());
         dto.setParameterName(result.getParameter().getName());
         dto.setParameterUnit(result.getParameter().getUnit());
+        dto.setMinNorm(result.getParameter().getMinNorm());
+        dto.setMaxNorm(result.getParameter().getMaxNorm());
         return dto;
     }
 }

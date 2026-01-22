@@ -11,4 +11,6 @@ public class TestResultDto {
     private Long parameterId;
     private String parameterName;
     private String parameterUnit;
+    private Double minNorm;
+    private Double maxNorm;
 }
