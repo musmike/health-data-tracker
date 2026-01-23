@@ -1,6 +1,8 @@
 package mm.health_data_tracker.security;
 
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.security.SignatureException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,6 +43,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 System.out.println("Unable to get JWT Token");
             } catch (ExpiredJwtException e) {
                 System.out.println("JWT Token has expired");
+            } catch (SignatureException e) {
+                System.out.println("JWT Signature is invalid");
+            } catch (MalformedJwtException e) {
+                System.out.println("JWT Token is malformed");
+            } catch (Exception e) {
+                System.out.println("JWT Token error: " + e.getMessage());
             }
         }
 
@@ -50,7 +58,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
                 UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken =
                         new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities()
+                                userDetails, null, userDetails.getAuthorities()
                         );
                 usernamePasswordAuthenticationToken
                         .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
